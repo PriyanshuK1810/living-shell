@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# kssh — ssh wrapper.
+#
+# Guard first, then exec: on this machine openssh 10.5p1 is installed, so
+# the guard passes and this is a plain `ssh`. It stays because the config
+# must behave honestly on a machine where openssh is missing — then the
+# user gets the exact install command instead of a bare "command not
+# found" (the SSH tab accent and the island's "SSH session" state are
+# produced by the watcher, which classifies whatever actually runs).
+set -euo pipefail
+
+if ! command -v ssh >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+kssh: no ssh client on this machine.
+
+    sudo pacman -S openssh
+
+Until then the SSH session state (cyan tab accent + island "SSH session"
+announcement) cannot be produced — kitty's own ssh kitten reports the
+same missing dependency (see docs/kitty.md).
+EOF
+    exit 127
+fi
+
+exec ssh "$@"

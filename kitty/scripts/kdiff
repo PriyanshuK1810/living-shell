@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# kdiff — side-by-side diff inside the terminal (kitten diff).
+# Syntax colouring is built into the kitten itself (its highlighter ships
+# with kitty and already defaults to the github-dark style); there is no
+# external highlighter to install.
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+    printf 'usage: kdiff <file-a> <file-b>\n' >&2
+    exit 2
+fi
+
+exec kitten diff "$1" "$2"

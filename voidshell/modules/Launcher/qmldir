@@ -1,0 +1,6 @@
+Launcher Launcher.qml
+LauncherModel LauncherModel.qml
+AppDelegate AppDelegate.qml
+CommandRow CommandRow.qml
+SideNav SideNav.qml
+AppDetail AppDetail.qml

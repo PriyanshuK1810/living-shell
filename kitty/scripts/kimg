@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# kimg — show an image inline in this kitty terminal (kitten icat).
+# The icat kitten ships with kitty itself, so this has no extra
+# dependencies; only the inline preview renderer needs ImageMagick, and
+# without it icat still draws the image.
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+    printf 'usage: kimg <image> [more images...]\n' >&2
+    exit 2
+fi
+
+exec kitten icat --align left "$@"

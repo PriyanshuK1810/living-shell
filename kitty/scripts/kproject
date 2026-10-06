@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# kproject — start a kitty session from sessions/*.conf, chosen with fzf
+# (falls back to a plain numbered menu when fzf is not available).
+#
+# Sessions are launched as a fresh kitty OS window; kitty has no
+# remote-control action for `--session`, which is why this is a script
+# instead of a keymap (documented in docs/kitty.md).
+set -euo pipefail
+
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/kitty/sessions"
+
+if [ ! -d "$dir" ]; then
+    printf 'kproject: no session directory at %s\n' "$dir" >&2
+    exit 1
+fi
+
+# Session files are listed with fd when it exists (installed on this
+# machine) and with plain find otherwise — the picker never hard-depends
+# on either tool.
+files=()
+if command -v fd >/dev/null 2>&1; then
+    while IFS= read -r f; do
+        files+=("$(basename "$f")")
+    done < <(fd -e conf --max-depth 1 . "$dir" | sort)
+else
+    while IFS= read -r f; do
+        files+=("$f")
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.conf' -printf '%f\n' | sort)
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+    printf 'kproject: no sessions found in %s\n' "$dir" >&2
+    exit 1
+fi
+
+choice=""
+if command -v fzf >/dev/null 2>&1; then
+    choice="$(printf '%s\n' "${files[@]}" |
+        fzf --prompt='kitty session> ' --height=40% --reverse --border=rounded \
+            --header='Enter to launch, Esc to cancel')"
+else
+    printf 'Sessions in %s:\n' "$dir" >&2
+    select name in "${files[@]}"; do
+        [ -n "$name" ] && choice="$name"
+        break
+    done
+fi
+
+[ -n "$choice" ] || exit 0
+
+# Strip the .conf suffix for a readable OS window title.
+base="${choice%.conf}"
+exec kitty --session "$dir/$choice" --title "kitty:$base"

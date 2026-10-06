@@ -1,0 +1,33 @@
+# Living Kitty — inactive-pane focus dim (kitty 0.49 Slang pipeline).
+#
+# Requires the Slang shader compiler (`slangc`, package shader-slang);
+# without it kitty logs a clear "Install shader-slang" error and simply
+# runs with no shader — nothing else breaks.
+#
+# It reuses kitty's shipped `focus-highlight` fragment shader with the
+# animation stripped and the glow removed, so the whole effect is a
+# static multiply: it costs nothing per frame and only redraws when the
+# focused pane or the content changes.
+#
+# Restraint choices (design brief: no neon, no gradients, text first):
+#   INACTIVE_DIM 0.86          only 14% darker — readable at a glance,
+#                              not a "which pane is live?" puzzle.
+#   no highlight, no border    HIGHLIGHT_INTENSITY and BORDER_WIDTH are 0,
+#                              so the focused pane is never brightened
+#                              and no edge glow is drawn anywhere.
+#   ink-black target           the blend target is #0A0810 (the config's
+#                              own background), converted to linear RGB,
+#                              so dimming cools towards the palette
+#                              instead of grey.
+#   tab bar untouched          DIM_CENTRAL_AREA_ONLY keeps the bar and
+#                              the frame outside the effect.
+startgroup
+    animation_step 0
+    var float HIGHLIGHT_INTENSITY = 0
+    var float BORDER_WIDTH = 0
+    var float INACTIVE_DIM = 0.86
+    var float3 INACTIVE_DIM_COLOR = float3(0.00303, 0.00246, 0.00518)
+    var bool DIM_CENTRAL_AREA_ONLY = true
+    var bool INCLUDE_WINDOW_PADDING = true
+    shaders focus-highlight
+endgroup
