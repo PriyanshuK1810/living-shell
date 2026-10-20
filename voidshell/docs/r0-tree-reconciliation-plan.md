@@ -1,7 +1,7 @@
 # R0 tree reconciliation plan (dry-run)
 
 - Document: LS-R0-RECON-001 · Companion to `r0-current-state-audit.md` §1
-- Date: 2026-10-20 · Status: **proposed — awaiting approval**; Phases 0–3 never write to the live tree
+- Date: 2026-10-20 · Status: **Phases 0–3 executed 2026-10-20** (commit `fc3eb02` on this branch; backups in `~/dotfiles-backups/voidshell-reconcile-20261020-214018/`); Phase 4 decision pending; master not yet advanced
 - Goal: one authoritative code line. Repo (`~/living-shell`, GitHub `2c39b4d`) becomes a strict superset of the live runtime (`~/.config/quickshell/voidshell`), preserving the deployed tree's own history and all uncommitted work.
 
 ## 1. Evidence summary (why this direction)
