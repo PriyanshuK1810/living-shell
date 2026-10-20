@@ -22,12 +22,19 @@ PID. Each figure below is the printed value for its window; idle was
 sampled in three consecutive 30 s windows. RSS from
 `/proc/<pid>/status`. Child processes sampled at 10 Hz.
 
+> **Update 2026-10-21 (LS-BASE-01):** the session has since moved to
+> Quickshell 0.3.2 / Qt 6.12.0 / hyprlock 0.9.6 (full inventory:
+> `docs/r0-current-state-audit.md` §0). The figures below remain the
+> historic 2026-10 baseline and were **not** re-measured; the pinned,
+> reproducible baseline is produced by the LS-003 benchmark harness.
+> The dashboard shipped 5 tabs at measurement time and has 4 today.
+
 ## 2. Measured results
 
 | Scenario | CPU | RSS |
 |---|---|---|
 | **Idle** (no popup, overlay `off`) | **0.67 – 0.77 %** (3× 30 s windows) | **≈ 417 MB** |
-| Dashboard open (5 tabs, stats sampling at 2 s) | 1.85 % | ≈ 420 MB |
+| Dashboard open (5 tabs at measurement time, stats sampling at 2 s) | 1.85 % | ≈ 420 MB |
 | Task manager open (gauges + process table, 3 s `ps`) | 3.65 % | ≈ 431 MB |
 | **Visualizer overlay enabled, silent** (sink muted, no MPRIS player) | **1.98 %** (band 1.7 – 2.0 %) | ≈ 424 MB |
 | Visualizer enabled while the wake tap is armed (sink *un*muted, silent) | +2.8 pp over the above | — |

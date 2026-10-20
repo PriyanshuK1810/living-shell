@@ -39,7 +39,7 @@ living-shell/
 
 ```sh
 # 1. the desktop shell
-git clone <this-repo> /tmp/living-shell
+git clone https://github.com/PriyanshuK1810/living-shell.git /tmp/living-shell
 cp -r /tmp/living-shell/voidshell ~/.config/quickshell/voidshell
 qs -d -c voidshell --no-duplicate        # start the shell
 

@@ -143,7 +143,7 @@ sessions, IPC and security decisions, omissions and limitations).
 | Volume / mic / brightness | sliders move real state (F1–F4, F11/F12 react live); no backlight → disabled + reason |
 | DND | toggle suppresses toasts, history still collects |
 | Notifications | send one (`notify-send`) → toast + history + badge; clear-all works |
-| Dashboard | 5 tabs switch, graphs update while open |
+| Dashboard | 4 tabs switch, graphs update while open |
 | Task persistence | add/complete/delete → survives restart (`tasks.json`) |
 | Focus timer | countdown runs, closing the popup doesn’t stop it, completion toasts |
 | System stats | CPU/mem/net graphs move while the drawer is open |

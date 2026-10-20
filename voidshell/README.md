@@ -2,7 +2,7 @@
 
 A complete desktop shell for Hyprland, built on Quickshell, implemented to
 the Void Shell PRD. Slanted-pill top bar (no background strip), ten
-anchored popups with one-primary-at-a-time discipline, five-tab dashboard,
+anchored popups with one-primary-at-a-time discipline, four-tab dashboard,
 system monitor, theming (`@color`), wallpapers (`@wp`), local git/docker
 launcher plugins, notifications server + history + DND, calendar with a
 local event store, screenshot/recording, lock screen, and an optional
@@ -55,7 +55,8 @@ missing — PRD §37): `grim` + `slurp` (screenshots), `wf-recorder`
 ## Install
 
 ```sh
-git clone <this-repo> ~/.config/quickshell/voidshell   # or copy the tree
+git clone https://github.com/PriyanshuK1810/living-shell.git /tmp/living-shell
+cp -r /tmp/living-shell/voidshell ~/.config/quickshell/voidshell
 qs -c voidshell                                        # one-shot smoke run
 ```
 
@@ -93,7 +94,7 @@ Shell popups (defined in `hyprland.lua`, all via IPC — see below):
 | `Super + O` | Quick settings |
 | `Super + D` | Notifications |
 | `Super + Shift + A` | Media popup (not `Super + M` — see the note below) |
-| `Super + Shift + D` | Dashboard (5 tabs) |
+| `Super + Shift + D` | Dashboard (4 tabs) |
 | `Super + Shift + M` | System monitor / task manager |
 | `Super + W` | Workspace overview |
 | `Super + I` | Living State Island — activity stack (`island toggle`) |

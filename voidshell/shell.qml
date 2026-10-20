@@ -111,7 +111,7 @@ ShellRoot {
     ToastModule.Toast {
     }
 
-    // Six-tab dashboard (PRD 22); opened from the keybind/launcher, and
+    // Four-tab dashboard (PRD 22); opened from the keybind/launcher, and
     // from the clock pill which lands on its Calendar tab.
     DashboardModule.Dashboard {
     }

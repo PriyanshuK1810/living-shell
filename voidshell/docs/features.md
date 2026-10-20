@@ -931,7 +931,7 @@ so it aligns under the pill without a hard-coded x).
 | **C** Temporary event | crossfade **inside the pill** (announcement title/subtitle + duration bar) | `AnnouncementEngine` presents an event |
 | **D** Contextual card | island surface, one activity + its registered actions | `island context <key>` / row click |
 | **E** Activity stack | island surface, segmented body (Activities / Controls / Timers / Presets / Clipboard) | `Super + I`, clock right-click, `island stack` |
-| **F** Dashboard open | existing Dashboard (5 tabs, unchanged) | `Super + Shift + D`, clock left-click, routed actions |
+| **F** Dashboard open | existing Dashboard (4 tabs, unchanged) | `Super + Shift + D`, clock left-click, routed actions |
 | **G** Locked | island surface dropped, announcement paused | `PopupManager.locked` |
 
 - **Presentation order & dwell** — control 1.2 s, track/device 3 s,
