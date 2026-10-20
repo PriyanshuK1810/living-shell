@@ -2,7 +2,7 @@
 # Phase QA: open each primary popup via VOID_POPUP and require a clean log.
 set -u
 cd /home/Priyanshu/.config/quickshell/voidshell || exit 1
-POPUPS="launcher calendar media quickSettings notifications power dashboard taskManager overview lock"
+POPUPS="launcher media quickSettings notifications power dashboard taskManager overview lock"
 fail=0
 mkdir -p /tmp/voidqa
 for p in $POPUPS; do

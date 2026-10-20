@@ -19,9 +19,10 @@ import "../../services"
 //
 // Actions are exactly what BluetoothDevice exposes — connect/disconnect,
 // block/unblock, forget — with forget gated behind an in-place two-step
-// confirm. No pairing entry: quickshell registers no BlueZ agent, so a
-// Pair button would promise a confirmation flow that cannot happen
-// (PRD 17.3). Unpaired rows therefore never open this menu at all.
+// confirm. There is deliberately no Pair entry: pairing is the row's tap
+// itself (BluetoothService.pairDevice against the shell's own BlueZ agent),
+// and menuable() only offers this menu on paired/saved rows where all four
+// actions mean something. Unpaired rows never open it at all.
 PanelWindow {
     id: root
 

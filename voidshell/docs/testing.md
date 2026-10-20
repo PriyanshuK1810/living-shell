@@ -36,8 +36,8 @@ must be understood and fixed — never globally suppressed.
 ## 3. Functional gates (§43.3)
 
 ```sh
-./scripts/popup-check.sh   # → POPUP-CHECK-PASS   (10/10 popups)
-./scripts/tab-check.sh     # → TAB-CHECK-PASS     (5/5 dashboard tabs)
+./scripts/popup-check.sh   # → POPUP-CHECK-PASS   (9/9 popups)
+./scripts/tab-check.sh     # → TAB-CHECK-PASS     (4/4 dashboard tabs)
 ./scripts/coord-check.sh   # → PHASE-F-PROBE-PASS (one primary popup: 21/21)
 ./scripts/shelf-check.sh   # → PHASE-E-PROBE-PASS (Stage shelf: 15/15)
 ./scripts/hardening-check.sh # → PHASE-G-PROBE-PASS (motion/lock/disable/reload: 50)

@@ -47,7 +47,7 @@ known, deliberately untouched same-root-cause gap).
 | **Launcher** | fuzzy app search + keyboard launch, `@commands`, runnable actions (see §4) |
 | **Calendar** | merged into the dashboard **Overview** tab (§3): month grid, prev/next/today navigation, local event store (`~/.local/share/voidshell/calendar.json`), day agenda, new-event form; the clock pill and the `calendar` IPC target open the dashboard there |
 | **Media** | MPRIS artwork, title/artist/album, seek, prev/play-pause/next, shuffle/repeat, playlist when the player provides it; clear no-player state when no MPRIS player exists |
-| **Quick settings** | Wi-Fi tile + saved/available networks, Bluetooth tile + paired/discovered devices, airplane tile; brightness slider reads/writes the real backlight (re-probed while the panel is open, so it tracks Fn-key changes), volume slider + mute. Expandable tiles carry a chevron in the state pill's spot — their subtitle states on/off, no separate On button. The dropdown lists are **fixed five-row viewports**: scan results update in place — the panel never resizes while devices stream in — and longer lists scroll behind a draggable scrollbar. Clicking a secured, unsaved network opens a **password dialog centered on the screen**, backed by `WifiNetwork.connectWithPsk` (a wrong key comes back as `connectionFailed(NoSecrets)` and renders inline). Right-click (two-finger tap) a paired Bluetooth row opens a **context menu at the pointer** — connect/disconnect, block/unblock, forget behind a two-step confirm; unpaired rows stay inert because quickshell registers no BlueZ agent to run pairing with (PRD §17.3). QA: `VOID_QS=list|dialog|menu` (+ `VOID_QS_POS=x,y` to pin the menu) |
+| **Quick settings** | Wi-Fi tile + saved/available networks, Bluetooth tile + paired/discovered devices, airplane tile; brightness slider reads/writes the real backlight (re-probed while the panel is open, so it tracks Fn-key changes), volume slider + mute. Expandable tiles carry a chevron in the state pill's spot — their subtitle states on/off, no separate On button. The dropdown lists are **fixed five-row viewports**: scan results update in place — the panel never resizes while devices stream in — and longer lists scroll behind a draggable scrollbar. Clicking a secured, unsaved network opens a **password dialog centered on the screen**, backed by `WifiNetwork.connectWithPsk` (a wrong key comes back as `connectionFailed(NoSecrets)` and renders inline). Right-click (two-finger tap) a paired Bluetooth row opens a **context menu at the pointer** — connect/disconnect, block/unblock, forget behind a two-step confirm; unpaired rows pair on a tap — the shell runs its own BlueZ agent (`scripts/bt-agent`, registered as default) so the device bonds and connects with no prompt, one pairing at a time. QA: `VOID_QS=list|dialog|menu` (+ `VOID_QS_POS=x,y` to pin the menu) |
 | **Notifications** | server + history + DND; grouped cards, per-notification dismiss, clear-all, unread badge in the bar |
 | **Power** | lock, logout, suspend, hibernate, reboot, poweroff — each **enabled only if the capability probe found a working backend**; confirmation step; tests never press these |
 | **Dashboard** | four tabs, heading centered (§3) |
@@ -131,6 +131,55 @@ per visibility (§36).
 | `@wp` | wallpaper manager: thumbnail grid from `~/Pictures/wallpapers`, tone lock, overlay mode row (Off/Visualizer/Clock/Clock+Lyrics) |
 | `@web …` | web search / URL open (xdg-open) |
 | runnable actions | System Monitor, Dashboard, Workspace Overview, Quick Settings, Screenshot — full/region/output, Screen Recording start/stop — each greyed out with its reason when the tool (`grim`/`slurp`/`wf-recorder`) is missing |
+
+### Keyboard parity with rofi — the drawer absorbed its keys (2026-10-08)
+
+`Super + R` and `Super + Space` open the **same** drawer now, and every
+key rofi offered lives in it. Section cycling in particular is the
+sidebar's keyboard route (it was mouse-only):
+
+| Input | Result |
+|---|---|
+| `Ctrl` + `Tab` / `Ctrl`+`Shift`+`Tab` | next / previous sidebar section, wrapping — rofi's `kb-mode-next` / `kb-mode-previous` |
+| `Shift` + `←` / `→` | previous / next section, exactly the keys rofi binds |
+| `Ctrl` + `Return` | run the field as a shell command, matches or not — rofi's `kb-accept-custom` |
+| `Enter` with no matching row | runs it too, and the empty state says so out loud |
+| `Shift` + `Return` | selected app's own argv inside a terminal — rofi's `kb-accept-alt`, which is also where the drawer's old `Ctrl`+`Return` moved (the detail panel's keycap moved with it) |
+| `Ctrl` + `↑` / `↓` | query history back / forward — rofi's `kb-entry-history-up/down` |
+| `PageUp` / `PageDown` | one viewport of rows — rofi's `kb-page-prev/next` |
+| `Home` / `End` | first / last row — rofi's `kb-row-first/last` |
+
+Run-the-typed-line goes through `HyprlandService.execShell`
+(`hl.dsp.exec_cmd` → `/bin/sh`), so pipes, globs and quoting behave like
+a terminal line. Submitted queries persist as `queries` in
+`~/.local/share/voidshell/launcher.json` — 30 entries, deduped, newest
+first — beside favourites and recents, so the store stays shared rather
+than rofi-private.
+
+Documented divergences:
+
+- `Shift` + `←`/`→` give up caret selection and `Home`/`End` leave the
+  field — rofi trades the same keys away; the caret keeps them under
+  `Ctrl` + `Home` / `End`;
+- the `@` command list is section-independent (§24), so a cycle while
+  `@…` is typed moves the sidebar highlight and nothing else — the list
+  is the same list by design;
+- a run command's output is not captured and nothing waits on it, which
+  is rofi's behaviour too;
+- every row key wraps (`moveSelection`), so `PageDown` on a grid shorter
+  than one viewport lands back on the row it started from.
+
+#### Acceptance (drawer keyboard)
+
+| # | Check | Result |
+|---|---|---|
+| **K.1** | Section cycling both ways: `Ctrl`+`Tab` All→Favorites→Recent; `Ctrl`+`Shift`+`Tab` All→**Utilities** (wraps backwards); `Shift`+`Right` all→favorites, `Shift`+`Left` back to all | **PASS** — `send_shortcut` + `grim`; the pill identified by mean luminance per sidebar row band. The harness's image *viewer* was returning stale content (a 128×128 red square came back as a sidebar photo), so every capture was measured in pixels rather than looked at |
+| **K.2** | Run the typed line: `touch …/void-runtest1` pasted then plain `Enter` with no matching row created the file; `…/void-runtest2` + `Ctrl`+`Return` created its file | **PASS** — file existence |
+| **K.3** | Query-history round-trip: `…/void-histproof` submitted via `Ctrl`+`Return` (recorded), drawer reopened with an **empty** field, `Ctrl`+`↑` then `Enter` re-ran it. Then the same query recalled and undone with `Ctrl`+`↓`: `Ctrl`+`Return` afterwards created **no** file | **PASS** — file recreated after `rm`, so the recall really happened in the field; and `Ctrl`+`↓` really restored the empty draft rather than the history line |
+| **K.4** | `End` then `Home`: the detail-panel title fingerprint differs from baseline after `End` and is **identical** after `Home` (index 0 again) | **PASS** — 8×4 block-mean fingerprint, 5 differing blocks vs 0 |
+| **K.5** | `PageDown` from index 0 fingerprinted identical to baseline while `PageUp` from index 0 landed on the **last** row — the step is a whole viewport (≥ one grid of 19 apps × 4 columns), not ±1 | **PASS** |
+| **K.6** | `Shift`+`Return` spawned a real terminal: kitty processes 2 → 3, and the detail keycap now reads `Shift Enter` | **PASS** |
+| **K.7** | `scripts/check.sh` CHECK-PASS; `Super + R` → `qs -c voidshell ipc call launcher toggle` in `hyprland.lua`, `hyprctl reload` clean with `hyprctl configerrors` empty, and running that payload alone opens the drawer | **PASS** statically; **the physical keypress is unverified** — `hl.dsp.send_shortcut` only reaches *windows*, never the compositor's binds (proved: `F1` did not toggle the default sink), and no virtual-keyboard tool is installed, so it needs one human `Super`+`R` |
 
 ## 5. Theme & wallpaper (PRD §20–21)
 
@@ -474,6 +523,7 @@ survives popup close; completion publishes a toast.
 | Bind | Action |
 |---|---|
 | `Super + Space` | launcher toggle |
+| `Super + R` | launcher toggle — the **same** shell drawer as `Super + Space` (one drawer, two keys; §4). rofi's four modes now have **no** default bind: start them by hand with `rofi -show drun` / `fav` / `recent` / `act` (§24) |
 | `Super + O` | quick settings toggle |
 | `Super + D` | notifications toggle |
 | `Super + Shift + A` | media popup toggle |
@@ -1018,3 +1068,151 @@ instance, 0 WARN/0 ERROR.
 geometry, not by a synthetic event; `powerprofilesctl` / `hyprsunset` /
 `kdeconnect-cli` / `wf-recorder` paths could not be run because the
 binaries are absent (reported as `missing`, not faked).
+
+## 24. Rofi — the shell's design, regenerated live (standalone drawer + clipboard picker)
+
+voidshell ships **two app drawers**: `Super + R` and `Super + Space` both
+toggle the **shell's own launcher** (one drawer, two keys — §14), and
+`~/.config/rofi/` still ships rofi wearing exactly that design, started
+by hand (`rofi -show drun`, `fav`, `recent`, `act`) and still serving as
+the clipboard picker's menu. The shell drawer absorbed rofi's keyboard —
+section cycling, run-the-typed-line, query history, page/first/last row
+navigation (§4) — so rofi is no longer the primary drawer; it is kept as
+a second, identical-looking surface, and neither half may drift into the
+other:
+
+| File | Owner | Holds |
+|---|---|---|
+| `~/.config/rofi/config.rasi` | hand-edited | structure and behaviour: geometry (1160 × 600 at 60,76; 4 × 4 grid; 784 × 46 capsule), fonts, widget rules, `configuration {}`, and a **fallback palette** so rofi still paints before the shell has ever started (the clipboard picker is bound to `rofi -dmenu` too) |
+| `~/.config/rofi/voidshell.rasi` | **generated** | colour only — one `* { … }` block re-exported from `common/Colors.qml` |
+| `services/RofiThemeSync.qml` | the shell | the generator: a `Singleton` whose `rasi` binding reads the colour tokens, written out with `FileView.setText()` at startup and on **every** `onRasiChanged` |
+
+`config.rasi` pulls it in with `?import` (optional) rather than
+`@import`, because the file only exists once the shell has started —
+and it is written **outside** `~/.config/quickshell/` deliberately:
+quickshell watches its own tree, so a file written there would reload
+the shell on every theme change, and the reload would change the theme
+again. `shell.qml` references `RofiThemeSync.written` in `servicesWarmed`
+so the singleton is instantiated eagerly instead of on first use.
+
+Changing preset, light/dark or the wallpaper's dynamic tone therefore
+moves rofi on its **next invocation** with no manual step — the sync is
+a binding, not a snapshot. Proven without restarting anything: a
+`ThemeService.setMode("light")` from a throwaway engine moved the
+generated file's `text` from `#F0E8E1FF` to `#1B1526FF` while the shell
+kept running.
+
+**App-list parity.** `LauncherModel.allApps` matches the union of both
+drawers' fields: name, generic, comment and id (the shell's own) **plus**
+`execString`, `categories` and `keywords` — the three rofi adds via
+`drun-match-fields` in `config.rasi`. Set parity already held
+(`DesktopEntries.applications` excludes Hidden/NoDisplay; 0 of 38
+`.desktop` files declare `OnlyShowIn`/`NotShowIn`/`Hidden`).
+
+**Documented divergences** (deliberate, not oversights):
+
+- rofi does not search `comment`/`id`, so the standalone rofi drawer can
+  still miss a query the shell's drawer matches (superset, one direction
+  only);
+- the shell boosts prefix matches to the top of a typed query; rofi's
+  `sort: false` hands ranking to its matcher. Empty-query order is the
+  same `localeCompare` in both;
+- the shell's hover/glow states are shell-only — rofi has no hover;
+- the `Ctrl` + `K` keycap beside the capsule has no rofi equivalent.
+
+### Acceptance
+
+| # | Check | Result |
+|---|---|---|
+| **V.1** | Geometry: `hyprctl layers` reports rofi at `xywh: 60 76 1160 604` — the launcher's box (`60 76 1160 600`); sentinel captures measure window 1160.0 × 604.0, capsule 784.0 × 45.3 at (248, 97.3), tiles 114 px / 127.3 pitch, 4 columns | **PASS** — `#ff0000`/`#0000ff`/`#00ff00` sentinel + rawvideo bbox |
+| **V.2** | Generated tokens are the shell's, byte for byte: `panel #231D30B8`, `panel-border #A678FF73`, `field #1F192BD1`, `field-border-focus #B284FF8F`, `tile-border #BE96FF33`, `tile-hover #2B223BE0` — all equal to the fallback block and to `Colors` | **PASS** — file diff |
+| **V.3** | Live regeneration: `ThemeService.setMode("light")` rewrote `voidshell.rasi` in place (`text` `#F0E8E1FF` → `#1B1526FF`) with no reload; dark restored afterwards | **PASS** — throwaway engine against the real singleton |
+| **V.4** | rofi parses with the generated file present: `rofi -dump-theme` exit 0 and **0** `optional theme` warnings (the warning reappears if the file is removed, confirming `?import` is what loads it) | **PASS** |
+| **V.5** | Type, geometry and colour of the search row: placeholder text measures 745.3 px against the shell's 747.3 px at the same start x; the U+F002 magnifier matches in shape and size; caret is `textPrimary` like Qt's | **PASS** — pixel bbox + crops |
+| **V.6** | `scripts/check.sh` CHECK-PASS; `qmllint` on all QML (note: the identifier `byte` makes qmllint 1.0 exit 255 silently — the helper is named `hexByte`) | **PASS** |
+
+**Font gotcha worth remembering:** rofi hands its font string to pango,
+where a bare number is **points** — `"Outfit 14"` renders ~33 % larger
+than the shell's `pixelSize: 14`. Every font in `config.rasi` carries an
+explicit `px` suffix for that reason. Likewise the prompt uses the
+**`JetBrainsMono Nerd Font Mono`** face rather than `Theme.fontMono`
+verbatim: Qt and pango resolve `"JetBrainsMono Nerd Font"` to different
+files, and the plain name draws U+F002 as a bare ring where the shell
+draws the magnifier.
+
+### Four modes — three of them are the shell's, not rofi's
+
+**No default keybind since the swap (2026-10-08):** `Super + R` opens the
+shell's drawer now, so rofi's modes start by hand (`rofi -show drun`).
+Inside rofi, **`Ctrl` + `Tab`** (or `Shift` + `←`/`→`,
+rofi's own `kb-mode-next`/`kb-mode-previous`) cycles `modes:
+"drun,fav,recent,act"`, set in `config.rasi`. rofi has no sidebar — the
+drawer's section list is `sideNav` — so the section is said out loud by
+the **prompt glyph**, each script emitting the drawer's own codepoint:
+
+| Mode | Rows come from | Prompt | Enter does |
+|---|---|---|---|
+| `drun` | rofi's own `.desktop` scan (38 files) | U+F002 magnifier | the `.desktop` `Exec` — rofi's own path |
+| `fav` | `launcher.json` → `LauncherModel.favoriteIds` | U+F004 star | `LauncherModel.launchApp` |
+| `recent` | `launcher.json` → `LauncherModel.recentIds` | U+F017 clock | `LauncherModel.launchApp` |
+| `act` | `LauncherModel.commands` — the drawer's `@` commands **and** its runnable actions | U+F1DE sliders | the drawer's own dispatch, by `kind` |
+
+`act` dispatch is `LauncherModel.activateCommand`, so it is the drawer's
+behaviour rather than a re-implementation of it:
+
+- `popup` / `action` → System Monitor, Dashboard, Quick Settings,
+  Workspace Overview, screenshot full/region/output, screen recording —
+  byte-identical to pressing Enter on that row in the drawer;
+- `plugin` (`@git`, `@containers`, `@color`, `@wp`) and `web` (`@web`) →
+  those views only exist as QML *inside* the drawer, so the bridge sets
+  `LauncherModel.pendingQuery` and `Launcher.qml` opens the drawer and
+  applies it. rofi lands you in the plugin, not on a stub of it — the
+  requested "bridge to the shell" rather than a second implementation.
+
+**Wiring — one copy of everything:**
+
+| File | Role |
+|---|---|
+| `services/RofiBridge.qml` | singleton + `IpcHandler { target: "void" }`: `rows <mode>` → `payload␟label␟icon` lines, `run <payload>` → dispatch. Names, icons, order and behaviour all come from `LauncherModel`, so the two drawers cannot drift — there is only one list |
+| `~/.config/rofi/voidmode.sh` | the script; three **symlinks** in `~/.config/rofi/scripts/` (`fav.sh`, `recent.sh`, `act.sh`). rofi keys the mode off `$0`'s basename, so one file answers to three names and there is no copy to keep in step |
+| `LauncherModel.pendingQuery` → `Launcher.qml openWithQuery()` | the hand-off for the plugin rows. Applied **after** open, because `onVisibleChanged` resets the field; the handler clears it first so the signal is one-shot |
+
+`shell.qml` references `RofiBridge.registered` in `servicesWarmed` for the
+same reason it references `RofiThemeSync.written`: `IpcHandler` registers
+its target when it is constructed, so a handler nothing references would
+never exist and every selection would come back "Target not found."
+
+**Documented divergences:**
+
+- `drun` launches go straight to the `.desktop` `Exec` and rofi owns that
+  path, so they never reach `recordLaunch`. `fav`/`recent` *do* record —
+  they are shell-backed sections of the same store, and reading state
+  should write it. A launch from rofi's `fav` therefore updates the
+  drawer's Recent, while one from `drun` does not;
+- commands with no backend are **omitted** from `act` (the drawer shows
+  them greyed with a reason — today only Screen Recording, since
+  `wf-recorder` is not installed);
+- `.desktop` `[Desktop Action …]` stays off: only 3 of 38 files declare
+  any, and the shell does not surface them either. Turning it on would be
+  a rofi-only divergence, which is the opposite of the request;
+- rofi genuinely cannot do the sidebar, the right-hand detail panel, or
+  hover/glow — no config reaches those.
+
+### Acceptance (modes)
+
+| # | Check | Result |
+|---|---|---|
+| **V.7** | Four modes cycle **and wrap**: `Ctrl`+`Tab` from `drun` produced four distinct prompt-glyph crops (md5 `19b2e3c9151f` / `a95fb4d16d38` / `cafc4a2daf24` / `f550ffa9ac5e`) and the fifth was **byte-identical** to the first; `hyprctl layers` reported `xywh: 60 76 1160 600` in every mode, and the two `drun` captures were md5-identical | **PASS** — `hyprctl dispatch "hl.dsp.send_shortcut({ mods = \"CTRL\", key = \"Tab\" })"` + `grim` |
+| **V.8** | `act` → Repository Browser → Enter closes rofi and opens the shell's drawer **on the Repository Browser plugin** (`@git` in the capsule, dirty/clean chips rendered) | **PASS** — 3 of 3 runs, one through the full drun→fav→recent→act cycle; `voidshell-launcher` layer present, `rofi` layer gone |
+| **V.9** | `fav` → Enter launched a real app: `class: org.kde.dolphin` absent from `hyprctl clients` before, present after — and `launcher.json` recents moved `org.kde.dolphin` to the front, so a rofi pick really is a drawer pick | **PASS** |
+| **V.10** | Script protocol: the script is called once per mode while cycling with `retv=0 argc=0`, and on selection `retv=1 info=[git] argc=1 arg1=[Repository Browser]` — label in `$1`, payload in `$ROFI_INFO` | **PASS** — temporary `printf` probe, removed after |
+| **V.11** | `scripts/check.sh` CHECK-PASS; `rofi -dump-config` reports `modes: "drun,fav,recent,act"`; `rofi -h` detects all three scripts; `rofi -dump-theme` exit 0; shell log free of errors | **PASS** |
+
+**Gotcha worth remembering:** a script mode must do its dispatch
+**in the foreground**. `qs … &` before `exit 0` loses a real race with
+rofi tearing down the script's process group — `ROFI_INFO` arrives
+correct, the script exits 0, and the action silently never happens
+(reproduced three times, then fixed). It is safe to block because
+`qs ipc call` returns the moment the shell has handled it, and the shell
+never blocks on the spawned work (`execShell` is a fire-and-forget
+`hl.dsp.exec_cmd`); `timeout 3` bounds the worst case.

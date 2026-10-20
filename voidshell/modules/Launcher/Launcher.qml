@@ -31,6 +31,49 @@ Scope {
         return "";
     }
 
+    /*
+     * Apply a query handed over from outside the drawer — today rofi's
+     * `act` mode, which sets LauncherModel.pendingQuery because @git,
+     * @containers, @color, @wp and @web are views that only exist here
+     * and rofi can only offer them as rows.
+     *
+     * Opening comes first: onVisibleChanged below resets the field and
+     * the model, so a query applied before that point would be wiped on
+     * the way in. Applying it here rather than inside onVisibleChanged is
+     * what makes the hand-off work whether or not the drawer was already
+     * open — PopupManager.open is a no-op when it is.
+     */
+    function openWithQuery(q) {
+        PopupManager.open("launcher");
+        searchField.text = q;
+        LauncherModel.setSearch(q);
+        // Enter on an @plugin row opens that plugin's own view. @web is
+        // deliberately left on the command list: firing it with no query
+        // is the drawer's "type a query after @web" toast, not a search,
+        // so the field stays put for the query to be typed into.
+        const first = LauncherModel.results.length > 0 ? LauncherModel.results[0] : null;
+        if (first && first.kind === "plugin") {
+            LauncherModel.activateSelected();
+        }
+        searchField.cursorPosition = searchField.text.length;
+        searchField.forceActiveFocus();
+    }
+
+    // The receiving half of that hand-off. Clearing before applying is
+    // what makes it one-shot: the clear re-emits the change signal, and
+    // the empty guard above stops that second call from re-opening.
+    Connections {
+        target: LauncherModel
+        function onPendingQueryChanged() {
+            const q = LauncherModel.pendingQuery;
+            if (q === "") {
+                return;
+            }
+            LauncherModel.pendingQuery = "";
+            root.openWithQuery(q);
+        }
+    }
+
     // --- popup geometry (logical px) --------------------------------------
     readonly property int panelW: 1160
     readonly property int panelH: 600
@@ -63,14 +106,37 @@ Scope {
     function handleKey(event) {
         const k = event.key;
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
 
         if (k === Qt.Key_Escape) {
             root.handleEscape();
             event.accepted = true;
             return;
         }
+        // Section cycling — rofi's kb-mode-next / kb-mode-previous
+        // (Ctrl+Tab, Ctrl+Shift+Tab and Shift+Left / Shift+Right). The
+        // shift-arrows are taken from the caret exactly as rofi takes
+        // them from its own entry: the sidebar is mouse-only, so these
+        // keys are the only keyboard route to the eight sections.
+        if ((ctrl && (k === Qt.Key_Tab || k === Qt.Key_Backtab))
+                || (shift && (k === Qt.Key_Left || k === Qt.Key_Right))) {
+            let dir = 1;
+            if (k === Qt.Key_Left || k === Qt.Key_Backtab || (k === Qt.Key_Tab && shift)) {
+                dir = -1;
+            }
+            LauncherModel.cycleSection(dir);
+            event.accepted = true;
+            return;
+        }
         if (k === Qt.Key_Return || k === Qt.Key_Enter) {
             if (ctrl) {
+                // rofi's kb-accept-custom: the field is a command line
+                // whether or not rows match it.
+                root.runTypedQuery();
+            } else if (shift) {
+                // rofi's kb-accept-alt (alternate action): the selected
+                // app's own argv inside a real terminal — the same list
+                // the detail panel's "Open in Terminal" row runs.
                 root.terminalSelected();
             } else {
                 root.activateAndMaybeClose();
@@ -79,8 +145,42 @@ Scope {
             return;
         }
         if (k === Qt.Key_Up || k === Qt.Key_Down) {
+            if (ctrl) {
+                // rofi's kb-entry-history-up/down: recall submitted
+                // queries instead of moving the row selection.
+                const recalled = k === Qt.Key_Up ? LauncherModel.historyPrev()
+                                                  : LauncherModel.historyNext();
+                if (recalled !== null && recalled !== undefined) {
+                    searchField.text = recalled;
+                    searchField.cursorPosition = searchField.text.length;
+                }
+                event.accepted = true;
+                return;
+            }
             const dir = k === Qt.Key_Up ? -1 : 1;
             LauncherModel.moveSelection(root.gridNav ? dir * root.gridColumns : dir);
+            event.accepted = true;
+            return;
+        }
+        if (k === Qt.Key_PageUp || k === Qt.Key_PageDown) {
+            // rofi's kb-page-prev/next: a screenful of rows at a time.
+            const page = root.pageStep();
+            LauncherModel.moveSelection(k === Qt.Key_PageDown ? page : -page);
+            event.accepted = true;
+            return;
+        }
+        if (k === Qt.Key_Home || k === Qt.Key_End) {
+            if (ctrl) {
+                // Home/End belong to the rows now (rofi's kb-row-first /
+                // last), so the caret keeps them under Ctrl instead.
+                searchField.cursorPosition = k === Qt.Key_Home ? 0 : searchField.text.length;
+                event.accepted = true;
+                return;
+            }
+            const n = LauncherModel.results.length;
+            if (n > 0) {
+                LauncherModel.selectedIndex = k === Qt.Key_Home ? 0 : n - 1;
+            }
             event.accepted = true;
             return;
         }
@@ -114,9 +214,43 @@ Scope {
         }
     }
 
+    // rofi's accept-custom, on Ctrl+Return and on plain Enter when
+    // nothing matched: run the field as a command and close behind it.
+    function runTypedQuery() {
+        if (LauncherModel.runQuery(searchField.text)) {
+            PopupManager.closeAll();
+        }
+    }
+
+    // One page for kb-page-prev/next, sized from the real scroll
+    // viewport rather than a magic number: rows the center column
+    // actually shows × 4 columns in the grid, whole rows (not tiles) in
+    // the one-column command list.
+    function pageStep() {
+        const inCmd = LauncherModel.commandMode;
+        const rep = inCmd ? commandRepeater : appRepeater;
+        const first = rep.itemAt(0);
+        if (!first || first.height <= 0) {
+            return inCmd ? 1 : root.gridColumns;
+        }
+        const gap = inCmd ? 2 : Theme.space12;   // commandCol.spacing: 2
+        const rows = Math.max(1, Math.floor(centerFlick.height / (first.height + gap)));
+        return inCmd ? rows : rows * root.gridColumns;
+    }
+
     // Enter / click: launch apps and dispatch commands, but only close
-    // when the activation did not open a plugin view.
+    // when the activation did not open a plugin view. With no row to
+    // take, a typed query becomes a command — rofi accepts a custom
+    // entry the same way, and `@…` is excluded because a drawer
+    // namespace is never something to hand to /bin/sh.
     function activateAndMaybeClose() {
+        const n = LauncherModel.results.length;
+        if (n === 0) {
+            if (root.appMode && LauncherModel.searchText.trim() !== "") {
+                root.runTypedQuery();
+            }
+            return;
+        }
         if (LauncherModel.selectedIndex < 0) {
             return;
         }
@@ -661,17 +795,35 @@ Scope {
                                          && ((LauncherModel.commandMode && LauncherModel.filteredCommands.length === 0)
                                              || (root.appMode && LauncherModel.allApps.length === 0))
 
-                                Text {
+                                Column {
                                     anchors.centerIn: parent
-                                    horizontalAlignment: Text.AlignHCenter
-                                    text: LauncherModel.commandMode
-                                          ? "No commands match \"" + LauncherModel.searchText + "\""
-                                          : (LauncherModel.searchText !== ""
-                                             ? "No applications match \"" + LauncherModel.searchText + "\""
-                                             : "Nothing in this section yet")
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 13
-                                    color: Colors.textMuted
+                                    spacing: 3
+
+                                    Text {
+                                        width: centerCol.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: LauncherModel.commandMode
+                                              ? "No commands match \"" + LauncherModel.searchText + "\""
+                                              : (LauncherModel.searchText !== ""
+                                                 ? "No applications match \"" + LauncherModel.searchText + "\""
+                                                 : "Nothing in this section yet")
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: 13
+                                        color: Colors.textMuted
+                                    }
+
+                                    // A typed query with no row to take is a
+                                    // command — say so, so Enter is discoverable
+                                    // (rofi accepts a custom entry the same way).
+                                    Text {
+                                        width: centerCol.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        visible: !LauncherModel.commandMode && LauncherModel.searchText !== ""
+                                        text: "Enter runs it as a command — Ctrl+Enter always does"
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: 11
+                                        color: Colors.textDisabled
+                                    }
                                 }
                             }
                         }

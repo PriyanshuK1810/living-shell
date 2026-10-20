@@ -39,3 +39,16 @@ singleton TimerStore TimerStore.qml
 singleton ClipboardService ClipboardService.qml
 singleton KeepAwake KeepAwake.qml
 singleton PresetStore PresetStore.qml
+# --- rofi drawer (SUPER+R): re-exports Colors on every theme change ------
+singleton RofiThemeSync RofiThemeSync.qml
+# --- rofi drawer: IPC surface for its shell-backed fav/recent/act modes --
+singleton RofiBridge RofiBridge.qml
+# --- Workbench dock + gesture layer (Workbench plan) ---------------------
+singleton WorkbenchSettings WorkbenchSettings.qml
+singleton DesktopNavigationStore DesktopNavigationStore.qml
+singleton ApplicationStore ApplicationStore.qml
+singleton WindowActions WindowActions.qml
+singleton ContextActionRegistry ContextActionRegistry.qml
+singleton SurfaceCoordinator SurfaceCoordinator.qml
+singleton WorkbenchController WorkbenchController.qml
+singleton GestureRouter GestureRouter.qml

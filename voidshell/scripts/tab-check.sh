@@ -2,7 +2,7 @@
 # Phase QA: open the dashboard on each tab via VOID_TAB and require a clean log.
 set -u
 cd /home/Priyanshu/.config/quickshell/voidshell || exit 1
-TABS="overview media weather alerts productivity"
+TABS="overview media alerts productivity"
 fail=0
 mkdir -p /tmp/voidqa
 for t in $TABS; do

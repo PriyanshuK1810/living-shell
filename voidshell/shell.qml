@@ -14,6 +14,7 @@ import "./modules/Dashboard" as DashboardModule
 import "./modules/TaskManager" as TaskManagerModule
 import "./modules/WorkspaceOverview" as WorkspaceOverviewModule
 import "./modules/StageShelf" as StageShelfModule
+import "./modules/Workbench" as WorkbenchModule
 import "./modules/LockScreen" as LockScreenModule
 import "./modules/WallpaperOverlay" as WallpaperOverlayModule
 import "./modules/Island" as IslandModule
@@ -61,8 +62,28 @@ ShellRoot {
         JobBridge.demoMode,
         IslandRouter.serial >= 0,
         AnnouncementEngine.serial >= 0,
-        IslandController.contextSerial >= 0
-    ].length === 26
+        IslandController.contextSerial >= 0,
+        // Rofi's drawer is exported from these same tokens
+        // (services/RofiThemeSync.qml). Touching it here is what makes that
+        // singleton instantiate at startup: a colour export nothing reads
+        // would never be made, and rofi would keep the stale palette.
+        // NB the count below was 26 while the list already held 28 — it is
+        // kept honest now that another entry joins it.
+        RofiThemeSync.written,
+        // Same reasoning for the IPC surface rofi's shell-backed modes
+        // call (services/RofiBridge.qml): IpcHandler registers its target
+        // when it is constructed, so a handler nothing references would
+        // never exist and every rofi selection would return "Target not
+        // found."
+        RofiBridge.registered,
+        // Workbench dock + gesture layer (plan). WorkbenchSettings loads
+        // the JSON both sides read, WorkbenchController owns the `workbench`
+        // IPC target and GestureRouter the `gesture` one — both targets must
+        // exist from the first frame, before any surface references them.
+        WorkbenchSettings.loaded,
+        WorkbenchController.keyboardMode === false,
+        GestureRouter.commitCount >= 0
+    ].length === 33
 
     BarModule.Bar {
     }
@@ -107,6 +128,13 @@ ShellRoot {
     // Stage shelf (Shadow Spaces §9): opt-in side column of the same
     // previews, suppressed whenever any primary popup is open.
     StageShelfModule.StageShelf {
+    }
+
+    // Workbench dock (plan): bottom-centred application dock + its
+    // on-demand preview strip, action palette and edge reveal — an
+    // overlay surface on its own `voidshell-workbench*` namespaces that
+    // never resizes anything and never replaces bar/overview/shelf.
+    WorkbenchModule.Workbench {
     }
 
     // Lock screen surface (PRD 25); hands authentication to hyprlock.

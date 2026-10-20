@@ -13,11 +13,13 @@ import "../../services"
 // a scrollbar in the right gutter past five rows — so the panel never
 // resizes while devices are being scanned and rows never clip mid-height.
 //
-// Unpaired devices are listed but inert with "Not paired" — pairing
-// needs a confirmation flow the shell does not implement, so there is
-// no button to pretend with (PRD 17.3). Paired/saved rows are `menuable`:
-// right-click (two-finger tap) opens the device context menu with the
-// real actions — connect/disconnect, block/unblock, forget.
+// Unpaired devices are listed and tappable: a tap runs the pairing flow
+// (BluetoothService.pairDevice) against the BlueZ agent, which accepts, so
+// the row pairs and connects without any prompt in the shell. Rows pair one
+// at a time — while one is pending the others read "Not paired" and stay
+// inert. Paired/saved rows are `menuable`: right-click (two-finger tap)
+// opens the device context menu with the real actions — connect/disconnect,
+// block/unblock, forget.
 Rectangle {
     id: root
 
@@ -93,7 +95,7 @@ Rectangle {
         if (device.blocked) {
             return "Blocked";
         }
-        if (device.pairing) {
+        if (device.pairing || BluetoothService.pairingDevice === device) {
             return "Pairing…";
         }
         if (device.connected) {
@@ -111,22 +113,29 @@ Rectangle {
         if (device.paired || device.trusted) {
             return "Saved";
         }
-        return "Not paired";
+        // Saved rows read "Saved"; a new one either offers itself or, while
+        // something else is pairing, says why it is not doing anything.
+        return root.canToggle(device) ? "Tap to pair" : "Not paired";
     }
 
-    // Same policy as the row's interactivity — connected devices can be
-    // dropped, saved ones connected, everything else stays inert. The
-    // context menu is offered on the same paired/saved set: there is no
-    // pairing action to put in it (no agent flow), so an unpaired row
-    // would only ever contain dead entries.
+    // Same policy as the row's interactivity: connected devices can be
+    // dropped, saved ones connected, and a new one starts the pairing flow.
+    // Everything in transit (connect, disconnect, a pending pair) stays
+    // inert so a tap cannot stack on top of an attempt already running. The
+    // context menu is still offered only on the paired/saved set — the
+    // actions it holds (connect/disconnect, block, forget) mean nothing for
+    // a device we have not bonded with yet.
     function canToggle(device) {
         if (!device) {
             return false;
         }
-        if (!BluetoothService.powered || device.blocked || device.pairing) {
+        if (!BluetoothService.powered || device.blocked) {
             return false;
         }
-        if (!device.paired && !device.trusted) {
+        if (device.pairing || BluetoothService.pairingDevice === device) {
+            return false;
+        }
+        if (!device.paired && !device.trusted && BluetoothService.pairing) {
             return false;
         }
         return device.state !== BluetoothDeviceState.Connecting && device.state !== BluetoothDeviceState.Disconnecting;
@@ -300,8 +309,13 @@ Rectangle {
                             }
                             trailColor: dev && dev.connected ? Colors.accentLight : Colors.textMuted
                             onTriggered: {
-                                if (dev) {
+                                if (!dev) {
+                                    return;
+                                }
+                                if (dev.paired || dev.trusted) {
                                     BluetoothService.toggleDevice(dev);
+                                } else {
+                                    BluetoothService.pairDevice(dev);
                                 }
                             }
                             onContextRequested: {

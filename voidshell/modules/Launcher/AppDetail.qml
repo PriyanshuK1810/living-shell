@@ -271,7 +271,7 @@ Item {
                 width: actions.width
                 glyph: 0xf120
                 label: "Open in Terminal"
-                keycap: "Ctrl Enter"
+                keycap: "Shift Enter"
                 available: LauncherModel.terminalBin !== ""
                 reason: "No terminal"
                 onClicked: root.terminalRequested()

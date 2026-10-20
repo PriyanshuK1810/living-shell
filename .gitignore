@@ -1,0 +1,9 @@
+# Compiled helper binaries (source is scripts/bt-agent.c)
+voidshell/scripts/bt-agent
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# QML compiled artifacts
+*.qmlc

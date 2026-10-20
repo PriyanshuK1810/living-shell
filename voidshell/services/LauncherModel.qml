@@ -41,6 +41,19 @@ Singleton {
     property var favoriteIds: []
     property var recentIds: []        // [{id, ts}] newest first
 
+    // Typed-query history (rofi's entry history): submitted commands,
+    // newest first, capped at 30 — persisted in the same store as
+    // favourites/recents so nothing here is rofi-private. `historyCursor`
+    // is the index being shown, -1 meaning "the field holds live text";
+    // `historyEcho` is the text history navigation last wrote, which is
+    // how setSearch tells a recalled query (leave the cursor alone) from
+    // fresh typing (reset it), and `historyDraft` is the line the first
+    // Ctrl+Up stashed so the last Ctrl+Down can hand it back.
+    property var queryHistory: []
+    property int historyCursor: -1
+    property string historyEcho: ""
+    property string historyDraft: ""
+
     // First installed terminal found by the startup probe ("" = none);
     // the detail panel's "Open in Terminal" row disables itself honestly.
     property string terminalBin: ""
@@ -165,25 +178,57 @@ Singleton {
     readonly property var recentApps: root.appsForSection("recent")
 
     // --- Section + search filtered applications --------------------------
+    //
+    // Field set is the union of both drawers': this list adds name,
+    // generic, comment and id (the shell's own), and now exec, categories
+    // and keywords too — the three rofi's `drun-match-fields` adds
+    // (config.rasi). Superset on purpose, so a query that finds an app in
+    // SUPER+R finds it here as well. The one asymmetry left is comment/id:
+    // rofi does not search those, so this drawer can still match a query
+    // SUPER+R will not.
+    function matches(entry, needle) {
+        if (needle === "") {
+            return true;
+        }
+        const fields = [entry.name, entry.genericName, entry.comment, entry.id, entry.execString];
+        for (var i = 0; i < fields.length; i++) {
+            if (fields[i] && String(fields[i]).toLowerCase().indexOf(needle) !== -1) {
+                return true;
+            }
+        }
+        // categories/keywords are QStringList-valued on DesktopEntry, so
+        // they are walked entry by entry; a missing property is a miss.
+        const lists = [entry.categories, entry.keywords];
+        for (var l = 0; l < lists.length; l++) {
+            var list = lists[l];
+            if (!list || list.length === undefined) {
+                continue;
+            }
+            for (var k = 0; k < list.length; k++) {
+                if (String(list[k]).toLowerCase().indexOf(needle) !== -1) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     readonly property var allApps: {
         var base = root.sectionApps;
         var needle = root.searchText.toLowerCase();
         var result = [];
         for (var i = 0; i < base.length; i++) {
             var entry = base[i];
-            var name = entry.name.toLowerCase();
-            var comment = entry.comment ? entry.comment.toLowerCase() : "";
-            var generic = entry.genericName ? entry.genericName.toLowerCase() : "";
-            var id = entry.id.toLowerCase();
-            if (needle === "" ||
-                name.indexOf(needle) !== -1 ||
-                comment.indexOf(needle) !== -1 ||
-                generic.indexOf(needle) !== -1 ||
-                id.indexOf(needle) !== -1) {
+            if (root.matches(entry, needle)) {
                 result.push(entry);
             }
         }
         // Recent stays chronological; other sections sort by match quality.
+        // SUPER+R runs `sort: false` and takes the mode's own order, which
+        // is this same localeCompare once the query is empty — so browsing
+        // reads identically. The prefix boost below is the documented
+        // divergence: typed queries rank prefix matches first here, while
+        // rofi hands ranking to its matcher.
         if (root.section !== "recent") {
             result.sort(function(a, b) {
                 var an = a.name.toLowerCase();
@@ -212,6 +257,33 @@ Singleton {
     function setSection(sectionId) {
         root.section = sectionId;
         root.selectedIndex = 0;
+    }
+
+    // --- Section cycling (rofi's kb-mode-next / kb-mode-previous) --------
+    // rofi walks its modes with Ctrl+Tab and Shift+Left / Shift+Right;
+    // this drawer's eight sections sit behind a mouse-only sidebar, so the
+    // same keys walk sidebarSections here, wrapping both ways. The query
+    // is deliberately kept: search filters *within* the section you land
+    // on, which is what the sidebar has always meant (the `@` command
+    // list stays section-independent — its sidebar highlight is the only
+    // visible half of a cycle there).
+    function cycleSection(delta) {
+        const secs = root.sidebarSections;
+        if (secs.length === 0) {
+            return;
+        }
+        let i = 0;
+        for (let j = 0; j < secs.length; j++) {
+            if (secs[j].id === root.section) {
+                i = j;
+                break;
+            }
+        }
+        let next = (i + delta) % secs.length;
+        if (next < 0) {
+            next += secs.length;
+        }
+        root.setSection(secs[next].id);
     }
 
     // --- Launcher commands / plugins (PRD §19.2) ------------------------
@@ -345,7 +417,32 @@ Singleton {
         return null;
     }
 
+    function commandById(id) {
+        for (let i = 0; i < root.commands.length; i++) {
+            if (root.commands[i].id === id) {
+                return root.commands[i];
+            }
+        }
+        return null;
+    }
+
+    // Query the drawer applies the next time it opens. rofi's `act` mode
+    // lands here through services/RofiBridge.qml: @git, @containers,
+    // @color, @wp and @web are QML views that only exist inside this
+    // drawer, so rofi hands the query over instead of pretending to have
+    // them. Launcher.qml listens for the change and applies it — see
+    // openWithQuery there for why the property is cleared inside the
+    // handler rather than by the writer.
+    property string pendingQuery: ""
+
     function setSearch(text) {
+        // Fresh typing (or any write that isn't a history recall) puts
+        // the history cursor back to "live": historyPrev/historyNext set
+        // historyEcho first, so the query they wrote passes this test.
+        if (text !== root.historyEcho) {
+            root.historyCursor = -1;
+            root.historyDraft = "";
+        }
         root.searchText = text;
         root.selectedIndex = 0;
         if (!text.startsWith("@")) {
@@ -366,6 +463,9 @@ Singleton {
         root.activePlugin = "";
         root.section = "all";
         root.selectedIndex = -1;
+        root.historyCursor = -1;
+        root.historyEcho = "";
+        root.historyDraft = "";
     }
 
     // Back out of a plugin view to the command list, keeping the prefix.
@@ -541,6 +641,66 @@ Singleton {
         root.saveState();
     }
 
+    // --- Typed query → command (rofi's `run` / kb-accept-custom) ---------
+    // With no row to take, the field is a command line: the string goes
+    // to /bin/sh through hl.dsp.exec_cmd, so pipes, globs and quoting
+    // behave exactly like a terminal line. Output is not captured and
+    // nothing waits on it — rofi runs custom entries the same way.
+    function runQuery(query) {
+        const raw = (query === undefined || query === null) ? root.searchText : query;
+        const q = String(raw).trim();
+        if (q === "") {
+            return false;
+        }
+        root.recordQuery(q);
+        HyprlandService.execShell(q);
+        return true;
+    }
+
+    function recordQuery(q) {
+        var list = root.queryHistory.filter(function (s) { return s !== q; });
+        list.unshift(q);
+        if (list.length > 30) {
+            list = list.slice(0, 30);
+        }
+        root.queryHistory = list;
+        root.historyCursor = -1;
+        root.historyEcho = "";
+        root.historyDraft = "";
+        root.saveState();
+    }
+
+    // Ctrl+Up walks back to older queries, Ctrl+Down forward again, and
+    // the last Ctrl+Down returns the stashed draft. Returns the text to
+    // show, or null for "nothing to do" (caller leaves the field alone).
+    function historyPrev() {
+        if (root.queryHistory.length === 0) {
+            return null;
+        }
+        if (root.historyCursor < 0) {
+            root.historyDraft = root.searchText;
+            root.historyCursor = 0;
+        } else if (root.historyCursor < root.queryHistory.length - 1) {
+            root.historyCursor++;
+        }
+        root.historyEcho = root.queryHistory[root.historyCursor];
+        return root.historyEcho;
+    }
+
+    function historyNext() {
+        if (root.historyCursor > 0) {
+            root.historyCursor--;
+            root.historyEcho = root.queryHistory[root.historyCursor];
+            return root.historyEcho;
+        }
+        if (root.historyCursor === 0) {
+            root.historyCursor = -1;
+            root.historyEcho = "";
+            return root.historyDraft;
+        }
+        return null;
+    }
+
     // Persist favorites + recents (state dir owned by StorageService;
     // FileView reports loadFailed for a missing file → first-run seed).
     FileView {
@@ -564,6 +724,9 @@ Singleton {
             root.recentIds = Array.isArray(data.recents)
                 ? data.recents.filter(function(r) { return r && typeof r.id === "string"; })
                       .map(function(r) { return { id: r.id, ts: typeof r.ts === "number" ? r.ts : 0 }; })
+                : [];
+            root.queryHistory = Array.isArray(data.queries)
+                ? data.queries.filter(function(q) { return typeof q === "string" && q !== ""; }).slice(0, 30)
                 : [];
             // Migration: state written before the `seeded` stamp (or by
             // the startup-race first run) — seed pinned defaults once.
@@ -601,6 +764,10 @@ Singleton {
         }
         root.favoriteIds = favs;
         root.recentIds = [];
+        root.queryHistory = [];
+        root.historyCursor = -1;
+        root.historyEcho = "";
+        root.historyDraft = "";
         root.saveState();
     }
 
@@ -618,7 +785,8 @@ Singleton {
             version: 1,
             seeded: true,
             favorites: root.favoriteIds,
-            recents: root.recentIds
+            recents: root.recentIds,
+            queries: root.queryHistory
         }, null, 2));
     }
 
