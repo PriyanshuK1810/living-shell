@@ -11,19 +11,35 @@ import "../../services"
 // password input, weather and layout chips, compact media controls and
 // protected power actions.
 //
-// Authentication is never implemented here: the field hands off to the
-// discovered system locker (hyprlock / swaylock / gtklock), which performs
-// the real PAM authentication. The surface stays up underneath it and
-// dismisses only when that locker reports a successful unlock — there is
-// no home-grown password validation (PRD 25) and no Escape bypass: while
-// locked, PopupManager refuses to open or dismiss anything else.
+// Authentication is never implemented here: opening this surface starts
+// the discovered system locker (hyprlock / swaylock / gtklock) which
+// performs the real PAM authentication *immediately* (LS-LOCK-01b) — the
+// decorative layer is a backdrop, never the lock itself. The surface
+// dismisses only when the locker ends (LS-LOCK-01a semantics:
+// docs/decisions/0005-lock-ownership.md); there is no home-grown password
+// validation (PRD 25) and no Escape bypass: while locked, PopupManager
+// refuses to open or dismiss anything else. QA rigs (VOID_POPUP set) never
+// auto-start the locker; Escape dismisses only with VOID_POPUP=lock plus
+// explicit VOID_QA=1 (LS-LOCK-01d).
 Scope {
     id: root
 
     // QA-only escape hatch: `VOID_POPUP=lock qs -c voidshell` opens this
-    // surface for render checks and must be dismissible by the harness.
-    // A lock opened for real (power menu / keybind) never closes on Esc.
-    readonly property bool qaMode: Quickshell.env("VOID_POPUP") === "lock"
+    // surface for render checks. Two separate QA conditions, deliberately
+    // (LS-LOCK-01d):
+    //   qaContext — *any* VOID_POPUP value: the instance is a test rig, so
+    //     the real locker is never auto-started from it (a gate must never
+    //     lock the session it runs on; hardening-check N opens this surface
+    //     via IPC on a VOID_POPUP=overview instance).
+    //   qaMode — the surface was opened for render checks *and* the
+    //     operator explicitly asked for dismissibility (VOID_QA=1): only
+    //     then may Escape close it. A real lock ignores Escape entirely.
+    readonly property string qaPopup: {
+        const v = Quickshell.env("VOID_POPUP");
+        return (v === undefined || v === null) ? "" : String(v);
+    }
+    readonly property bool qaContext: root.qaPopup !== ""
+    readonly property bool qaMode: root.qaPopup === "lock" && Quickshell.env("VOID_QA") === "1"
 
     property bool authBusy: false
     property string authError: ""
@@ -52,11 +68,20 @@ Scope {
             root.authBusy = false;
             root.attempt = "";
             if (exitCode === 0) {
-                // Real authentication succeeded — drop the surface.
+                // hyprlock exits 0 when its session lock is released. NB
+                // (LS-LOCK-01a; docs/decisions/0005-lock-ownership.md):
+                // exit 0 means "the locker ended", reachable without PAM
+                // success (compositor revocation, SIGUSR1, grace window).
+                // Closing over both outcomes is safe: either PAM passed,
+                // or another locker/compositor owns the lock now.
                 root.authError = "";
                 PopupManager.closeAll();
             } else {
-                root.authError = "Unlock did not complete (locker exit " + exitCode + ").";
+                // Fail honest (LS-LOCK-01e): a crashed or refused locker
+                // leaves the compositor WITHOUT a session lock — say so
+                // instead of implying the session is secured. Enter
+                // retries because authBusy is false again.
+                root.authError = "Lock failed (" + PowerService.lockCommand.replace(/^.*\//, "") + " exit " + exitCode + ") — the session is NOT locked. Press Enter to try again.";
             }
         }
     }
@@ -225,6 +250,18 @@ Scope {
                 if (authField) {
                     authField.forceActiveFocus();
                 }
+                if (!root.qaContext) {
+                    // Real lock request (LS-LOCK-01b): the trusted locker
+                    // starts NOW, not on Enter — the decorative layer is
+                    // never what "locked" means. A missing locker refuses
+                    // the surface instead of pretending to be locked.
+                    if (!PowerService.canDo("lock")) {
+                        ToastService.push("Lock", "No lock screen installed (hyprlock / swaylock / gtklock)", "", "warning");
+                        PopupManager.closeAll();
+                        return;
+                    }
+                    root.startAuth();
+                }
             } else {
                 root.armed = "";
                 root.authError = "";
@@ -351,7 +388,7 @@ Scope {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                text: root.authError !== "" ? root.authError : (root.authBusy ? "Waiting for the authenticator…" : (PowerService.canDo("lock") ? "Press Enter to unlock — authentication is handled by " + PowerService.lockCommand.replace(/^.*\//, "") + " (PAM)." : "No lock screen installed (hyprlock / swaylock / gtklock): authentication unavailable."))
+                text: root.authError !== "" ? root.authError : (root.authBusy ? "Waiting for the authenticator…" : (PowerService.canDo("lock") ? "Press Enter to start " + PowerService.lockCommand.replace(/^.*\//, "") + " — it owns authentication (PAM)." : "No lock screen installed (hyprlock / swaylock / gtklock): authentication unavailable."))
                 font.family: Theme.fontUi
                 font.pixelSize: 12
                 color: root.authError !== "" ? Colors.danger : Colors.textMuted
