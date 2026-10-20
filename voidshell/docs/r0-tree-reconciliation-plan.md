@@ -1,7 +1,7 @@
 # R0 tree reconciliation plan (dry-run)
 
 - Document: LS-R0-RECON-001 · Companion to `r0-current-state-audit.md` §1
-- Date: 2026-10-20 · Status: **Phases 0–3 executed 2026-10-20** (commit `fc3eb02` on this branch; backups in `~/dotfiles-backups/voidshell-reconcile-20261020-214018/`); Phase 4 decision pending; master not yet advanced
+- Date: 2026-10-20 · Status: **executed** — Phases 0–3 (commit `fc3eb02`), merged to `master`; Phase 4 Option A implemented as `scripts/deploy.sh` (live tree changes only on explicit `--apply`). Backups: `~/dotfiles-backups/voidshell-reconcile-20261020-214018/`
 - Goal: one authoritative code line. Repo (`~/living-shell`, GitHub `2c39b4d`) becomes a strict superset of the live runtime (`~/.config/quickshell/voidshell`), preserving the deployed tree's own history and all uncommitted work.
 
 ## 1. Evidence summary (why this direction)
@@ -63,7 +63,7 @@ diff -rq ~/living-shell/voidshell ~/.config/quickshell/voidshell
 
 | Option | Description | Risk |
 |---|---|---|
-| **A. Repo authoritative + deploy script (recommended)** | deployed tree stays exactly as-is; development happens in repo; `scripts/deploy.sh` (rsync repo → deployed, `--backup-dir` timestamped) run manually | lowest; live tree changes only on explicit deploy |
+| **A. Repo authoritative + deploy script (implemented)** | deployed tree stays exactly as-is; development happens in repo; `scripts/deploy.sh` (`--check` default / `--apply` with timestamped tar backup in `${XDG_STATE_HOME}/voidshell/deploy/backups/`, never deletes target files) run manually | lowest; live tree changes only on explicit deploy |
 | B. Symlink `~/.config/quickshell/voidshell → ~/living-shell/voidshell` | single source, zero copy | must verify qs config resolution + `.git`/path assumptions on a live system; medium |
 | C. Reset deployed to repo remote | fetch repo into deployed, `reset --hard` | deployed history preserved only in bundles/branch; live-tree write; highest |
 
